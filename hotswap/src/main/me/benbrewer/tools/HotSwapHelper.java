@@ -28,17 +28,19 @@ import com.sun.jdi.connect.Connector;
  */
 
 public class HotSwapHelper {
-	private VirtualMachine virtualMachine;
+	private VirtualMachine        virtualMachine;
+	private VirtualMachineManager virtualMachineManager;
 
 	public HotSwapHelper() {
 	}
 
 	public void connect( String host, String port ) throws Exception {
 		// find the connector to use
+		this.virtualMachineManager = Bootstrap.virtualMachineManager();
 		AttachingConnector connector = this.getAttachingConnector();
 
 		// configure it using the passed in host and port
-		Map connectorArguments = this.setupConnectorArguments( host, port, connector );
+		Map connectorArguments = this.setupConnectorArguments( host, port, connector.defaultArguments() );
 
 		// connect to the virtual machine
 		this.virtualMachine = connector.attach( connectorArguments );
@@ -58,28 +60,29 @@ public class HotSwapHelper {
 		}
 	}
 
-	private void checkCapabilities() throws Exception {
+	public void checkCapabilities() throws Exception {
 		if( !this.virtualMachine.canRedefineClasses() ) {
 			throw new IllegalStateException( "doesn't support class replacement" );
 		}
 	}
 
-	private Map setupConnectorArguments( String host, String port, AttachingConnector connector ) {
-		Map connectorArguments = connector.defaultArguments();
+	public Map setupConnectorArguments( String host, String port, Map defaultArguments ) {
 		Connector.Argument connectorHost;
 		Connector.Argument connectorPort;
 
 		// use port if using dt_socket
-		connectorPort = (Connector.Argument)connectorArguments.get( "hostname" );
-		connectorPort.setValue( host );
-		connectorHost = (Connector.Argument)connectorArguments.get( "port" );
-		connectorHost.setValue( port );
-		return connectorArguments;
+		connectorPort = (Connector.Argument)defaultArguments.get( "hostname" );
+		connectorHost = (Connector.Argument)defaultArguments.get( "port" );
+
+		if( host != null && port != null ) {
+			connectorPort.setValue( host );
+			connectorHost.setValue( port );
+		}
+		return defaultArguments;
 	}
 
-	private AttachingConnector getAttachingConnector() {
-		VirtualMachineManager manager = Bootstrap.virtualMachineManager();
-		List connectors = manager.attachingConnectors();
+	public AttachingConnector getAttachingConnector() {
+		List connectors = virtualMachineManager.attachingConnectors();
 		AttachingConnector connector = null;
 
 		for( Object baseConnector : connectors ) {
@@ -98,6 +101,7 @@ public class HotSwapHelper {
 	public void replace( File classFile, String className ) throws Exception {
 		// load class(es)
 		byte[] fileBytes = this.loadClassFile( classFile );
+
 		// redefine in JVM
 		List classes = this.virtualMachine.classesByName( className );
 
@@ -115,7 +119,7 @@ public class HotSwapHelper {
 		}
 	}
 
-	private byte[] loadClassFile( File classFile ) throws IOException {
+	public byte[] loadClassFile( File classFile ) throws IOException {
 		DataInputStream fileInput = new DataInputStream( new FileInputStream( classFile ) );
 
 		byte[] fileBytes = new byte[(int)classFile.length()];
